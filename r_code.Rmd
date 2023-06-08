@@ -1,6 +1,6 @@
 ---
-title: "AIP Group 14"
-author: "Group 14"
+title: "Classification Predictive Modelling"
+author: "Aman Parashar"
 date: "2022-11-12"
 output: html_document
 ---
