@@ -1,0 +1,823 @@
+---
+title: "AIP Group 14"
+author: "Group 14"
+date: "2022-11-12"
+output: html_document
+---
+
+# Acknowledgement
+
+---
+
+This is to certify that the work we are submitting is our own. All external references and sources are clearly acknowledged and identified within the contents. We are aware of the University of Warwick regulation concerning plagiarism and collusion. 
+
+No substantial part(s) of the work submitted here has also been submitted by us in other assessments for accredited courses of study, and we acknowledge that if this has been done an appropriate reduction in the mark we might otherwise have received will be made.
+
+---
+
+# Code Overview
+
+---
+
+This code is divided into multiple sections as listed below. These sections are according to the major steps of the CRISP-DM methodology framework:
+
+Section 1 - Business Understanding
+
+Section 2 - Data Understanding
+
+Section 3 - Data Preparation
+
+Section 4 - Modelling
+
+Section 5 - Model Evaluation
+
+Section 6 - Deployment and final suggestions
+
+---
+
+# Section 1 - Business Understanding
+
+## Background
+
+We are a part of an Analytical consulting company, and our client Universal Plus has requested us to design and deploy an email marketing system to target customers and increase sales.
+
+## Problem Statement
+
+Presently, Universal Plus is following rules of thumb or randomly targeting their customers. The client wants to predict the customers who will visit the shop as a result of the direct e-mail campaign.
+
+## Objective
+
+We are asked to design a methodology to predict the target customers. We'll utilise the CRISP-DM methodology framework to provide the solution to the above-mentioned problem while the below-mentioned constraint is taken care of.
+Constraint: Targeting uninterested customers cost the company money. 
+
+---
+
+# Section 2 - Data Understanding
+
+The input data has 64,000 customer records. Each customer has 20 attributes.
+
+All features present in the input customer data and pertinent to the analysis are described below:
+
+Feature | Description
+------------- | -------------
+Customer_ID | Customer identification number
+recency | Months since last purchase before the marketing campaign
+purchase_segment| Categorization for the purchase amount in the past year before the marketing campaign
+purchase| Actual purchase in the past year before the marketing campaign
+mens| whether the customer purchased men's merchandise in the past year before the marketing campaign (1 = purchased, 0 = not)
+womens| whether the customer purchased women's merchandise in the past year before the marketing campaign (1= purchased, 0 = not)
+zip_area|categorization of zip code as Urban, Suburban, or Rural
+new_customer|whether the customer is new in the past year or s/he is an existing customer (1 = new customer, 0 = existing customer)
+channel|categorization of the channels the customer purchased from in the past year.The categories are Phone, Web and Multi-channel
+email_segment|e-mail campaign the customer received
+age|age of the customer in years
+dependent|whether the customer has a dependent or not (1 = yes; 0 = no)
+account|whether the customer has an account or not (1 = yes; 0 = no)
+employed|whether the customer has a permanent job (1 = yes; 0 = no)
+phone|whether the customer registered his/her phone or not (1 = yes; 0 = no)
+delivery|categorization for the delivery address (1 = home; 2 = work; 3 = multiple)
+marriage|marital status (1=married, 2=single, 0 = others)
+payment_card|whether the customer registered a credit card for payment in the past year (1 = yes; 0 = no)
+spend|total amount spent in the following two weeks period
+visit|1:the customer visited the shop in the following two weeks period; 0: the customer did not visit the shop in the following two weeks period
+
+
+Please note below observations based on Data Understanding:
+
+1. 'Customer_ID' is not an useful attribute for model building process.
+
+2. Initial data exploration points that 'Account' attribute is always 1 in the input data, therefore, it is not useful in the model building process.
+
+3. 'Purchase_Segment' is a derived attribute based on 'purchase' feature. It also has missing values, it will be re-calculated based on 'purchase' feature.
+
+4. 'Age' column does not have any information gain. Therefore, this feature is not considered in the analysis. However, we have derived 'age_segment' based on 'age' feature. As evident from the information gain, 'age_segment' influences target variable (visit).
+Below mentioned age segments are calculated:
+19-30 years;30-40 years;40-50 years;50+ years
+
+5. There are missing values in 'spend' attribute as well. Since it is a continuous variable, missing values are dealt with the mean of spend column where customer visit was seen; in other words visit = 1.
+
+6. Data type correction will be done to modify the data type to factor from integer.
+
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+
+```{r packages ,include=FALSE}
+
+
+# Below packages are installed to carry out the analysis:
+
+
+#install.packages("tidyverse") # for data manipulation
+
+#install.packages("dplyr") # for data manipulation 
+
+#install.packages("FSelector") # for feature selection in r
+
+#install.packages("caTools") # for data partioning in r
+
+#install.packages("ROSE") # for data sampling 
+
+#install.packages("FSelector") # for feature selection, information gain
+
+#install.packages("plyr") # for data manipulation
+
+#install.packages("e1071") # for models - svm
+
+#install.packages("caret") # for ML algorithms
+
+#install.packages("pROC") # for model evaulation
+
+#install.packages("CustomerScoringMetrics") # for confusion matrix
+
+#install.packages("randomForest") # for RF
+
+#install.packages("tree") # for Decision Tree
+
+#install.packages("maptree") # for Decision Tree
+
+```
+
+
+
+``` {r load libraries, include = FALSE}
+
+#Loading the libraries to carry out the analysis: 
+
+library(tidyverse)
+
+library(FSelector)
+
+library(caTools)
+
+library(ROSE)
+
+library(FSelector)
+
+#library(plyr)
+
+library(e1071)
+
+library(caret) 
+
+library(pROC) 
+
+library(CustomerScoringMetrics)
+
+library(randomForest)
+
+library(tree)
+
+library(maptree)
+
+```
+
+
+# Section 3 - Data Preparation
+
+Reading the assignment_data into the r environment
+
+```{r reading_data}
+
+custdata <- read.csv("assignment_data.csv", stringsAsFactors = TRUE)
+
+```
+
+Checking the summary and structure of the loaded data frame:
+
+```{r initial_data_summary}
+
+# structure
+
+str(custdata)
+
+# summary
+
+summary(custdata)
+
+```
+
+Checking if there are any duplicates in the data at the customer_id level.
+Output = 64,000; implies there are no duplicates at the customer_Id level
+
+```{r checking_duplicates}
+
+n_distinct(custdata$Customer_ID)
+
+```
+
+Removing Customer_Id and account features from the data
+
+```{r removing customerid, account}
+
+custdata$Customer_ID <- NULL
+
+custdata$account <- NULL
+
+```
+
+custdata_v1 - calculating the correct purchase segment and age_segment
+
+Calculation for purchase_segment_v1
+
+```{r updated_purchase_segment}
+
+custdata_v1 <- custdata %>%
+  mutate(purchase_segment_v1 = if_else(purchase >= 0 & purchase < 100,"0_100",
+                               if_else(purchase >= 100 & purchase < 200,"100_200",
+                               if_else(purchase >= 200 & purchase < 350,"200_350",
+                               if_else(purchase >= 350 & purchase < 500,"350_500",
+                               if_else(purchase >= 500 & purchase < 750,"500_750",
+                               if_else(purchase >= 750 & purchase < 1000,"750_1000",
+                               if_else(purchase >= 1000,"1000+","??"))))))))
+```
+
+Calculation for age segment
+
+```{r age_segment}
+
+custdata_v1 <- custdata_v1 %>%
+  mutate(age_segment = if_else(age>= 19 & age < 30,"19-30",
+                       if_else(age>= 30 & age < 40,"30-40",
+                       if_else(age>= 40 & age < 50,"40-50",
+                       if_else(age >= 50,"50+","??")))))
+
+```
+
+Verifying whether all 26 missing values in the puchase_segment are correctly updated 
+
+```{r checking the updated distribution}
+
+custdata_v1 %>%
+  group_by(purchase_segment) %>%
+  summarize(n = n())
+
+custdata_v1 %>%
+  group_by(purchase_segment_v1) %>%
+  summarize(n = n())
+
+```
+
+As we have already calculated updated purchase_segment. Therefore, removing the previous (original) purchase_segment to keep the data size in check and avoid confusion.
+
+```{r drop old purchase_segment}
+
+custdata_v1$purchase_segment <- NULL
+
+```
+
+We can not remove NA's from the "spend" column as all the "visits" where spend is NA is 1. This information is essential to carry out the analysis (moreover, our data is already imbalanced)
+
+Note - all 49 NA's in spend column are having visit 1
+
+```{r spend_check}
+
+custdata_v1 %>%
+  filter(is.na(spend)) %>%
+  group_by(visit) %>%
+  summarize(n = n())
+
+```
+Missing value treatment for spend column
+
+```{r missing_value_treatment for spend}
+
+# filtering out the data where visit == 1
+
+spent_not_0 <- custdata_v1 %>%
+  filter(visit == 1)
+
+# calculating mean spend
+
+mean_spend <- mean(spent_not_0$spend, na.rm = T)
+
+print(mean_spend)
+
+# replacing NA's in "spend" column with mean_spend where visit == 1
+
+custdata_v2 <- replace_na(custdata_v1, list(spend = mean_spend))
+
+# checking
+
+custdata_v2 %>%
+  filter(is.na(spend)) # 0 rows
+
+```
+
+Data type correction, converting the mis-matched integer columns to factors
+
+```{r datatype_correction}
+
+# correcting the datatype of mismatched columns
+
+# First generate a vector to keep the column names
+columns <- c("mens", "womens", "new_customer","purchase_segment_v1","age_segment", "dependent","employed","phone","delivery","marriage","payment_card","visit")
+
+# Set the correct measurement levels or data types
+custdata_v2[columns] <- lapply(custdata_v2[columns], as.factor)
+
+```
+
+Checking the summary of the corrected data. There should be no missing values and correct data types
+
+```{r checking updated structure and summary}
+
+# Check the structure of the dataset again
+str(custdata_v2)
+
+# check the summary of the dataset again
+summary(custdata_v2)
+
+```
+
+# Section 4 - Modelling
+
+Checking the levels of the target variable - visit. 1: customer visits and 0: customer does not visit.
+
+1 is our positive class for logistic regression
+
+```{r visit_levels}
+
+levels(custdata_v2$visit)
+
+```
+
+
+Calculating the information for target variable; 'age' has 0 information gain, therefore removing it from the analysis. However, the information gain for 'age_segment' is positive. Since Age_Segment and age provides same information.  
+
+```{r information_gain}
+
+attribute_weights <- information.gain(visit ~., custdata_v2)
+
+# Print weights
+
+print(attribute_weights)
+
+# removing age from the analysis
+
+custdata_v2$age <- NULL
+
+```
+
+```{r information_gain_plot}
+
+# copy of the weights
+
+df <- attribute_weights
+
+# add row names as a column to keep them during ordering
+
+df$attr <- rownames(df)
+
+# sort the weights in decreasing order of information gain values
+
+df <- arrange(df,-attr_importance)
+
+print(df)
+
+```
+
+
+We have concluded from the below graph and data table that 'spend' is not a good predictor for our target variable. To be precise, out of 64,000 data observations, 53,819 observations have 0 spend value and did not visit (visit = 0). Given, our data is imbalanced, in other words, most customers did not visit the store, therefore despite having the higher information gain, the 'spend' feature is not a good predictor for modeling.
+
+```{r exploring visit vs spend, warning=FALSE}
+
+ggplot(custdata_v2, aes(x=spend, colour =  visit))+
+  geom_histogram(bins = 30)+
+  ggtitle("Distribution of Spend")
+  
+
+custdata_v2 %>%
+  group_by(visit, spend) %>%
+  summarize(n = n())
+
+```
+
+
+Re arranging the columns, target variable - visit at the end of the table. Based on the above-mentioned explanation removing "spend" feature from the model building process
+
+```{r removing_spend}
+
+# Re arranging
+
+custdata_v3 <-custdata_v2 %>%
+  dplyr::select(-visit,visit)
+
+
+# removing spend
+
+custdata_v3$spend <- NULL
+
+```
+
+Preparing test and train data for the model development (train) and evaluation (test).
+Please note that we've iterated over different ratios of train/test split and the most optimum ratio (70/30) is utilized here.
+
+```{r train_test_split}
+
+set.seed(108)
+
+# Generate split vector to partition the data into training and test sets with training ratio of 0.70
+
+split = sample.split(custdata_v3$visit, SplitRatio = 0.70)   
+
+# Generate the training and test sets by sub-setting the data records from original data set
+
+training_set = subset(custdata_v3, split == TRUE) 
+
+test_set = subset(custdata_v3, split == FALSE) 
+
+```
+
+Checking the proportion of observations with respect to the target variable in the input data, training data and test data
+
+```{r proportion_check}
+
+# original data
+
+prop.table(table(custdata_v3$visit))
+
+#  Find proportion of churns in the training set
+prop.table(table(training_set$visit))
+
+# Find proportion of churns in the test set
+prop.table(table(test_set$visit))
+
+# therefore the proportion of target variable is maintained
+
+```
+
+As evident form the initial data exploration, our data is imbalanced. Therefore, we have utilized the oversampling technique to train the model
+
+```{r oversampling}
+
+set.seed(108)
+
+# oversampling
+
+oversampled_data <- ovun.sample(visit~. , data = training_set, method = "over", p= 0.50, seed=108)$data
+
+# distribution from the training set
+
+prop.table(table(training_set$visit))
+
+# Check the proportion of classes of visit
+
+prop.table(table(oversampled_data$visit))
+
+```
+
+
+# Section 4 - Modelling
+
+## 1. Logistic Regression
+
+```{r logistic_regression}
+
+# Build a logistic regression model assign it to LogReg
+
+LogReg <- glm(visit~. , data = oversampled_data, family = "binomial")
+
+# Predict the class probabilities of the test data
+
+LogReg_pred <- predict(LogReg, test_set, type="response")
+
+# Predict the class 
+
+LOGREG_class <- ifelse(LogReg_pred > 0.65, 1, 0)
+
+# Save the predictions as factor variables
+
+LOGREG_class <- as.factor(LOGREG_class)
+
+# Confusion Matrix for Logistic Regression
+
+confusionMatrix(LOGREG_class, test_set$visit, positive='1', mode = "prec_recall")
+
+```
+
+
+## 2. Linear Discriminant Analysis 
+
+```{r LDA}
+
+library(MASS)
+
+# Build a logistic regression model assign it to LogReg
+
+LDAmodel <- lda(visit ~., data =  oversampled_data)
+
+# Predict the Test set results 
+
+LDA_predict = predict(LDAmodel, test_set)
+
+# creating a copy of test_set
+
+results <- test_set
+
+# Create a column named PredictionLDA in data frame results and add predictions obtained by LDA to that column
+
+results$PredictionLDA <- LDA_predict$class
+
+# Find the correct predictions
+
+correct_LDA <- which(test_set$visit == results$PredictionLDA)
+
+# Find the percentage of correct predictions
+
+accuracy_LDA <- length(correct_LDA)/length(test_set$visit)
+
+# Accuracy of LDA
+
+print(accuracy_LDA)
+
+# Confusion Matrix LDA
+
+conf <- table(list(predicted=LDA_predict$class, observed=test_set$visit))
+
+conf
+
+```
+
+
+
+
+```{r LDA_False_Positives}
+
+# False positives for LDA
+
+false_positives_lda <- results %>%
+  filter(visit == 0 & PredictionLDA == 1 ) %>%
+  summarize(false_positives = n())
+
+print(false_positives_lda)
+  
+```
+
+
+## 3. SVM Modelling
+
+```{r SVM}
+
+# Build SVM model and assign it to SVM_model
+
+SVM_model <- svm(visit~. , data = oversampled_data, kernel= "radial", scale = TRUE, probability = TRUE)
+
+
+# Predict the class of the test data
+
+SVM_pred <- predict(SVM_model,test_set)
+
+
+# Use confusionMatrix to print the performance of SVM model
+
+confusionMatrix(SVM_pred, test_set$visit, positive = "1", mode = "prec_recall")
+
+```
+
+## 4. Decision Trees
+
+```{r Decision_Trees_Building}
+
+# Build the decision tree by using tree() function
+
+tree_model <- tree(visit ~., oversampled_data)
+
+# Display the summary of your model and print the model
+
+summary(tree_model)
+
+print(tree_model)
+
+# Plot the model
+draw.tree(tree_model)
+
+```
+
+```{r Decison_Tree_Accuracy}
+
+# Predict the class of visits in test set
+
+tree_predict <- predict(tree_model, test_set, type = "class")
+
+# Confusion matrix for Decision Trees
+
+confusionMatrix(tree_predict, test_set$visit, positive='1', mode = "prec_recall")
+
+```
+
+
+## 5. Random Forest
+
+```{r RF_Model}
+
+# Set random seed
+
+set.seed(108)
+
+# Build Random Forest model and assign it to RF_model
+
+RF_model <- randomForest(visit~., oversampled_data, ntree = 600, mtry= 6)
+
+```
+
+
+Based on MeanDecreaseGini value - recency, purchase, email_segment, age_segment, and mens are top 5 features of importance 
+
+```{r rf_info_gain}
+
+# Check the important features by using importance() function
+
+# Note - A higher MeanDecreaseGini value indicates higher feature importance
+
+rf_info_gain <- importance(RF_model)
+
+print(rf_info_gain)
+```
+
+
+```{r RF_Predictions}
+
+# Predict the visit of the test data
+
+RF_pred <- predict(RF_model, test_set)
+
+# Confusion matrix
+
+confusionMatrix(RF_pred, test_set$visit, positive='1', mode = "prec_recall")
+
+```
+
+# Section # 5 - Model Evaluation
+
+```{r visit_probabilities}
+
+# Obtain visit probabilities
+
+# RF
+
+RF_prob <- predict(RF_model,test_set, type = "prob")
+
+# SVM 
+
+SVM_pred <- predict(SVM_model, test_set, probability = TRUE)
+
+## Add probability = TRUE for SVM
+
+SVM_prob <- attr(SVM_pred, "probabilities")
+
+```
+
+
+Use `roc()` function to generate input data for the ROC curve of these models.
+  
+```{r ROC_function}
+
+# Logistic Regression
+ROC_LogReg <- roc(test_set$visit, LogReg_pred)
+
+# Random Forest
+ROC_RF <- roc(test_set$visit, RF_prob[,2])
+
+# SVM
+ROC_SVM <- roc(test_set$visit, SVM_prob[,2])
+
+```
+
+
+Plot the ROC curve for SVM and Random Forest.
+
+```{r ROC_Curve_SVM_RF}
+
+# Plot the ROC curve for SVM and Random Forest
+
+ggroc(list(SVM = ROC_SVM,RF = ROC_RF), legacy.axes=TRUE)+ xlab("FPR") + ylab("TPR") +
+   geom_abline(intercept = 0, slope = 1, color = "darkgrey", linetype = "dashed")
+
+```
+
+
+```{r AUC_SVM_RF}
+
+# AUC(SVM)
+
+auc(ROC_SVM)
+
+# AUC(RF)
+
+auc(ROC_RF)
+
+```
+
+
+# Section # 6 - Deployment and Final Suggestions
+
+```{r Cumm_Gain_RF}
+
+# Obtain cumulative gains table for Random Forest
+
+GainTable_RF <- cumGainsTable(RF_prob[,2], test_set$visit, resolution = 1/100)
+
+```
+
+
+
+```{r}
+
+# Plot the gain chart for RF
+
+plot(GainTable_RF[,4], col="blue", type="l",    
+xlab="Percentage of test instances", ylab="Percentage of correct predictions")
+grid(NULL, lwd = 1)
+legend("bottomright",
+c("Random Forest"),
+fill=c("blue"))
+
+```
+
+```{r rf_correct_predictions}
+
+# filtering index positions where RF model makes correct predictions:
+
+correct_rf_index <- which(test_set$visit == RF_pred)
+
+# Filtering out the data
+
+correct_rf_data <- test_set[c(correct_rf_index),]
+
+# filtering data where customer had a visit, visit == 1
+
+rf_visit_1 <- correct_rf_data %>%
+  filter(visit == 1)
+
+```
+
+
+```{r}
+
+# Summarizing correct predictions by email_segment and visit
+
+summary_email_rf <- rf_visit_1 %>%
+  group_by(email_segment,visit) %>%
+  summarize(sum = n())
+
+```
+
+
+
+
+```{r rf_correct_predictions}
+
+# filtering index positions where RF model makes correct predictions:
+
+correct_rf_index <- which(test_set$visit == RF_pred)
+
+# Filtering out the data
+
+correct_rf_data <- test_set[c(correct_rf_index),]
+
+correct_rf_data1 <- custdata[c(correct_rf_index),]
+
+# filtering data where customer had a visit, visit == 1
+
+rf_visit_1 <- correct_rf_data %>%
+  filter(visit == 1)
+
+```
+
+
+```{r filter_vist1}
+
+x <- correct_rf_data1 %>%
+  filter(visit == 1)
+
+```
+
+```{r spend_segment}
+
+# spend_segment
+x <- x %>%
+  filter(spend != 0) %>%
+  mutate(spend_segment = if_else(spend >= 1 & spend < 50,"0_50",
+                               if_else(spend >= 50 & spend < 100,"50_100",
+                               if_else(spend >= 100 & spend < 150,"100_150",
+                               if_else(spend >= 150 & spend < 200,"150_200",
+                               if_else(spend >= 200 & spend < 300,"200_300",
+                               if_else(spend >= 300 & spend < 400,"300_400",
+                               if_else(spend >= 400 & spend < 500,"400_500",
+                               "??"))))))))
+
+```
+
+```{r export_file}
+
+write.csv(x, file = "x.csv")
+
+```
+
